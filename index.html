@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sever — revocation by chain-walk</title>
+<style>
+  /* ── Sever visual system ──────────────────────────────────────────────
+     Subject: agent authority chains for private-share transfer. The page is
+     an instrument panel, not a marketing site. One bold move: the chain is a
+     living circuit that goes dark when severed. Everything else stays quiet.
+     Palette keyed to Kessai: navy Ruri / vermillion Shu, on near-black.    */
+  :root{
+    --bg:#0b0e17; --panel:#121726; --line:#1f2740; --ink:#e8ecf6;
+    --dim:#8893ad; --ruri:#3a59d1; --ruri-bright:#5b7cff;
+    --shu:#e3402c; --shu-glow:#ff5a44; --live:#36c98e; --gold:#d8b24a;
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono',Menlo,monospace;
+    --disp:'SF Pro Display',-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--disp);
+    line-height:1.45;padding:32px 40px 80px;min-height:100vh;
+    background-image:radial-gradient(circle at 20% -10%,rgba(58,89,209,.10),transparent 50%);}
+  header{display:flex;align-items:baseline;gap:18px;border-bottom:1px solid var(--line);
+    padding-bottom:18px;margin-bottom:24px;flex-wrap:wrap}
+  h1{font-size:34px;font-weight:800;letter-spacing:-.02em}
+  h1 .cut{color:var(--shu)}
+  .tag{color:var(--dim);font-size:15px;font-family:var(--mono)}
+  .standards{margin-left:auto;color:var(--dim);font-size:12px;font-family:var(--mono);text-align:right}
+  .standards b{color:var(--ruri-bright)}
+
+  .layout{display:grid;grid-template-columns:480px 1fr;gap:28px;align-items:start}
+  @media(max-width:1100px){.layout{grid-template-columns:1fr}}
+
+  .beat{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:18px 18px 20px;margin-bottom:18px}
+  .beat h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);
+    display:flex;align-items:center;gap:8px;margin-bottom:14px}
+  .beat h2 .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;
+    background:var(--ruri);color:#fff;font-size:12px;font-weight:700}
+  .q{font-size:13px;color:var(--dim);margin:-6px 0 14px;font-style:italic}
+
+  button{font-family:var(--disp);font-size:14px;font-weight:600;color:#fff;cursor:pointer;
+    background:var(--ruri);border:none;border-radius:9px;padding:10px 14px;margin:4px 4px 0 0;
+    transition:transform .08s,background .15s}
+  button:hover{background:var(--ruri-bright)}
+  button:active{transform:translateY(1px)}
+  button.danger{background:var(--shu)} button.danger:hover{background:var(--shu-glow)}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
+  button.ghost:hover{border-color:var(--ruri);color:var(--ink)}
+  button:disabled{opacity:.35;cursor:not-allowed;transform:none}
+
+  .log{font-family:var(--mono);font-size:12.5px;background:#0a0d15;border:1px solid var(--line);
+    border-radius:9px;padding:12px;margin-top:12px;max-height:200px;overflow:auto;color:var(--dim)}
+  .log .ok{color:var(--live)} .log .bad{color:var(--shu-glow)} .log .info{color:var(--ruri-bright)}
+  .log div{margin-bottom:3px;white-space:pre-wrap}
+
+  /* ── the chain: the hero ──────────────────────────────────────────── */
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 28px 30px;
+    position:sticky;top:24px}
+  .stage h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);margin-bottom:4px}
+  .verdict{font-family:var(--mono);font-size:15px;font-weight:700;margin:6px 0 24px;letter-spacing:.02em}
+  .verdict.valid{color:var(--live)} .verdict.invalid{color:var(--shu-glow)}
+
+  .chain{display:flex;flex-direction:column;gap:0}
+  .node{position:relative;padding:16px 18px;border-radius:11px;border:1.5px solid var(--line);
+    background:#0e1320;margin-left:0;transition:all .5s cubic-bezier(.4,0,.2,1)}
+  .node[data-depth="1"]{margin-left:40px} .node[data-depth="2"]{margin-left:80px}
+  .node .role{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim)}
+  .node .who{font-size:18px;font-weight:700;margin:3px 0 6px}
+  .node .who .arrow{color:var(--ruri-bright);margin:0 8px;font-weight:400}
+  .node .scope{font-family:var(--mono);font-size:12.5px;color:var(--gold)}
+  .node .addr{font-family:var(--mono);font-size:11px;color:#4a5575;margin-top:6px}
+  .node .badge{position:absolute;top:14px;right:16px;font-family:var(--mono);font-size:11px;
+    font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.06em}
+  /* connector line between nodes */
+  .node::before{content:"";position:absolute;left:-22px;top:-1px;width:2px;height:30px;
+    background:var(--live);opacity:.55;transition:all .5s}
+  .node[data-depth="0"]::before{display:none}
+
+  .node.live{border-color:rgba(54,201,142,.45);box-shadow:0 0 0 1px rgba(54,201,142,.12)}
+  .node.live .badge{background:rgba(54,201,142,.15);color:var(--live)}
+  .node.dead{border-color:var(--shu);background:#1a0f12;
+    box-shadow:0 0 30px rgba(227,64,44,.35);}
+  .node.dead .badge{background:var(--shu);color:#fff}
+  .node.dead .who,.node.dead .scope{opacity:.55}
+  .node.dead::before{background:var(--shu);opacity:.9;box-shadow:0 0 8px var(--shu-glow)}
+  /* a node downstream of a revoked one: orphaned — looks fine itself but chain is dead */
+  .node.orphan{border-color:rgba(227,64,44,.4);border-style:dashed}
+  .node.orphan .badge{background:rgba(227,64,44,.18);color:var(--shu-glow)}
+  .node.orphan::before{background:var(--shu);opacity:.7}
+
+  @keyframes flash{0%{box-shadow:0 0 0 0 rgba(227,64,44,.6)}100%{box-shadow:0 0 40px 4px rgba(227,64,44,.2)}}
+  .node.justkilled{animation:flash .6s ease-out}
+
+  .xrpl-status{margin-top:10px;font-family:var(--mono);font-size:12px}
+  .xrpl-badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;
+    font-weight:700;letter-spacing:.06em;margin-bottom:6px}
+  .xrpl-badge.live{background:rgba(54,201,142,.15);color:var(--live)}
+  .xrpl-badge.sim{background:rgba(136,147,173,.15);color:var(--dim)}
+  .xrpl-tx{display:block;margin-top:3px;color:var(--ruri-bright);text-decoration:none;font-size:11.5px}
+  .xrpl-tx:hover{text-decoration:underline}
+
+  .hint{font-size:12px;color:var(--dim);margin-top:18px;font-style:italic;border-top:1px solid var(--line);padding-top:14px}
+
+  /* ── home view ──────────────────────────────────────────────────────── */
+  #home{max-width:1000px;margin:0 auto}
+  #demo{display:none}
+  .home-title{font-size:72px;font-weight:800;letter-spacing:-.03em;line-height:1}
+  .home-title .cut{color:var(--shu)}
+  .home-subtitle{font-family:var(--mono);font-size:18px;color:var(--dim);margin-top:10px}
+  .home-standards{font-family:var(--mono);font-size:13px;color:var(--dim);margin-top:6px}
+  .home-standards b{color:var(--ruri-bright);font-weight:700}
+  .questions{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:40px 0 44px}
+  @media(max-width:760px){.questions{grid-template-columns:1fr}}
+  .qcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .qcard .qn{font-family:var(--mono);font-size:12px;color:var(--ruri-bright);font-weight:700}
+  .qcard .qt{font-size:17px;font-weight:600;margin-top:4px}
+  .qcard .qa{font-size:13px;color:var(--dim);margin-top:6px}
+  .diagram-title{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);margin-bottom:14px}
+  .arch{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px}
+  .arch .lbl{fill:var(--ink);font-family:var(--disp);font-size:14px;font-weight:600}
+  .arch .sub{fill:var(--dim);font-family:var(--mono);font-size:11px}
+  .arch .svg-stage{fill:var(--dim);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em}
+  .arch .note{fill:var(--dim);font-family:var(--mono);font-size:11px}
+  .cta{margin-top:36px}
+  .cta button{font-size:16px;padding:13px 26px;border-radius:10px}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div id="home">
+  <div class="home-title">Se<span class="cut">ver</span></div>
+  <div class="home-subtitle">revocation by chain-walk</div>
+  <div class="home-standards">built on <b>UOR-ADDR</b> · <b>VTEAI</b> — two open standards · CC0 · no vendor lock-in</div>
+
+  <div class="questions">
+    <div class="qcard"><div class="qn">Q1</div><div class="qt">Who authorized this agent?</div><div class="qa">A root capability signed by a human key.</div></div>
+    <div class="qcard"><div class="qn">Q2</div><div class="qt">What is it allowed to do?</div><div class="qa">Caveats — spend caps, venue allow-lists, expiry.</div></div>
+    <div class="qcard"><div class="qn">Q3</div><div class="qt">How does trust travel A → B?</div><div class="qa">Hash-linked delegation that only narrows.</div></div>
+    <div class="qcard"><div class="qn">Q4</div><div class="qt">How do you kill it?</div><div class="qa">Publish a revocation; the chain-walk kills the subtree.</div></div>
+  </div>
+
+  <div class="diagram-title">authority → action → settlement</div>
+  <div class="arch">
+    <svg width="100%" viewBox="0 0 900 470" role="img" aria-label="Sever architecture: a content-addressed capability chain governs authority, agents perform work, and an escrow settles only when work is verified and authority is still live; revocation propagates from the chain into settlement.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      </defs>
+
+      <!-- stage 1: authority -->
+      <text class="svg-stage" x="80" y="24">1 · authority</text>
+      <text class="note" x="210" y="24">off-chain · content-addressed</text>
+
+      <g>
+        <rect x="80" y="38" width="150" height="58" rx="9" fill="rgba(58,89,209,.16)" stroke="#3a59d1" stroke-width="1"/>
+        <text class="lbl" x="155" y="62" text-anchor="middle">Human</text>
+        <text class="sub" x="155" y="80" text-anchor="middle">signs root</text>
+      </g>
+      <line x1="230" y1="67" x2="268" y2="67" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+      <g>
+        <rect x="270" y="38" width="150" height="58" rx="9" fill="rgba(58,89,209,.16)" stroke="#3a59d1" stroke-width="1"/>
+        <text class="lbl" x="345" y="62" text-anchor="middle">Agent A</text>
+        <text class="sub" x="345" y="80" text-anchor="middle">$1M · 3 venues</text>
+      </g>
+      <line x1="420" y1="67" x2="458" y2="67" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+      <g>
+        <rect x="460" y="38" width="150" height="58" rx="9" fill="rgba(58,89,209,.16)" stroke="#3a59d1" stroke-width="1"/>
+        <text class="lbl" x="535" y="62" text-anchor="middle">Agent B</text>
+        <text class="sub" x="535" y="80" text-anchor="middle">$50k · 1 venue</text>
+      </g>
+      <line x1="610" y1="67" x2="648" y2="67" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+      <g>
+        <rect x="650" y="38" width="150" height="58" rx="9" fill="rgba(58,89,209,.16)" stroke="#3a59d1" stroke-width="1"/>
+        <text class="lbl" x="725" y="62" text-anchor="middle">Agent C</text>
+        <text class="sub" x="725" y="80" text-anchor="middle">$10k · 1 venue</text>
+      </g>
+      <text class="note" x="80" y="120">each link hash-bound to its parent — authority can only narrow</text>
+
+      <line x1="440" y1="138" x2="440" y2="172" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <!-- stage 2: action -->
+      <text class="svg-stage" x="80" y="196">2 · action</text>
+      <g>
+        <rect x="80" y="208" width="720" height="54" rx="9" fill="rgba(123,119,221,.16)" stroke="#7f77dd" stroke-width="1"/>
+        <text class="lbl" x="440" y="230" text-anchor="middle">Agent C performs the work</text>
+        <text class="sub" x="440" y="248" text-anchor="middle">produces a content-addressed work claim</text>
+      </g>
+
+      <line x1="440" y1="262" x2="440" y2="296" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <!-- stage 3: settlement -->
+      <text class="svg-stage" x="80" y="320">3 · settlement</text>
+      <text class="note" x="230" y="320">on-chain · XRPL testnet</text>
+      <g>
+        <rect x="80" y="332" width="720" height="66" rx="9" fill="rgba(54,201,142,.14)" stroke="#36c98e" stroke-width="1"/>
+        <text class="lbl" x="440" y="356" text-anchor="middle">Escrow releases</text>
+        <text class="sub" x="440" y="376" text-anchor="middle">only if work matches the hashlock AND authority is still live</text>
+      </g>
+
+      <!-- revocation propagation — left margin at x=60, clear of boxes -->
+      <line x1="60" y1="38" x2="60" y2="332" stroke="#e3402c" stroke-width="1.5" stroke-dasharray="5 5" marker-end="url(#ar)"/>
+      <text class="note" x="14" y="200" fill="#ff5a44">revoke</text>
+      <text class="note" x="5" y="216" fill="#ff5a44">propagates</text>
+      <text class="note" x="80" y="430">revoking any agent blocks its pending settlement — the kill reaches the money</text>
+    </svg>
+  </div>
+
+  <div class="cta">
+    <button onclick="window.startDemo()">Start the demo →</button>
+  </div>
+</div>
+
+<div id="demo">
+<header>
+  <h1>Se<span class="cut">ver</span></h1>
+  <span class="tag">revocation by chain-walk</span>
+  <span class="standards">built on <b>UOR-ADDR</b> · <b>VTEAI</b><br>two open standards · CC0 · no ledger required</span>
+</header>
+
+<div class="layout">
+  <div class="controls">
+    <div class="beat">
+      <h2><span class="n">1</span> Attenuation handoff</h2>
+      <div class="q">How does trust travel A→B?</div>
+      <button onclick="reset()">① Human authorizes Agent&nbsp;A</button>
+      <button onclick="delegate('Agent A','Agent B',50000,['hill'])">② A→B · narrow to $50k / hill</button>
+      <button class="ghost" onclick="delegate('Agent B','Agent C',500000,null)">③ B→C · try to WIDEN to $500k</button>
+      <button onclick="delegate('Agent B','Agent C',10000,null)">④ B→C · narrow to $10k</button>
+      <button class="ghost" onclick="checkAction('Agent C',8000,'forge')">⑤ C tries $8k on forge</button>
+    </div>
+
+    <div class="beat">
+      <h2><span class="n">2</span> Settlement on verified work</h2>
+      <div class="q">Did the agent actually do what it claimed?</div>
+      <button onclick="fundEscrow('Agent C',100)">① Fund escrow · hashlock on 100 units</button>
+      <button class="ghost" onclick="settle(90)">② Submit WRONG work (90 units)</button>
+      <div class="xrpl-status" id="xrpl-status"></div>
+    </div>
+
+    <div class="beat">
+      <h2><span class="n">3</span> Kill-switch cascade</h2>
+      <div class="q">How do you kill it when something goes wrong?</div>
+      <button class="danger" onclick="revoke('Agent B')">⚡ Compromise at B — SEVER</button>
+      <button class="ghost" onclick="replay()">Replay C's still-signed token</button>
+      <button class="ghost" onclick="settle(100)">Try to settle C's pending escrow</button>
+      <button onclick="settleClean()">✓ Reset & settle with live authority</button>
+    </div>
+
+    <div class="log" id="log"><div class="info">Ready. Click ① to authorize Agent A.</div></div>
+  </div>
+
+  <div class="stage">
+    <h2>Authorization provenance — root → leaf</h2>
+    <div class="verdict" id="verdict">—</div>
+    <div class="chain" id="chain"></div>
+    <div class="hint" id="hint">The chain is hash-linked: each node commits to its parent's content address.
+      Sever a parent and every descendant dies — provably, by chain-walk, not a database flag.</div>
+  </div>
+</div>
+</div><!-- #demo -->
+
+<script>
+// When served by the FastAPI server (http/https), call the SAME origin with
+// relative URLs. Only fall back to an explicit host if opened as a file://.
+const API = location.protocol.startsWith("http") ? "" : "http://127.0.0.1:8000";
+let lastChain = [];
+
+function log(msg, cls=""){const l=document.getElementById("log");
+  const d=document.createElement("div"); if(cls)d.className=cls; d.textContent=msg;
+  l.appendChild(d); l.scrollTop=l.scrollHeight;}
+
+async function api(path, body){
+  const opt = body ? {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)} : {};
+  const r = await fetch(API+path, opt); return r.json();
+}
+
+async function reset(){
+  await api("/reset",{});
+  xrplState = {createHash:null, finishHash:null};
+  const el=document.getElementById("xrpl-status"); if(el) el.innerHTML="";
+  log("Human signed the root grant: Agent A may transfer SpaceX Series J, up to $1M, 3 venues.","ok");
+  await render("Agent A");
+}
+
+async function delegate(frm,to,maxUsd,venues){
+  const r = await api("/delegate",{frm,to,max_usd:maxUsd,venues,ttl_seconds:venues?900:300});
+  if(!r.ok){
+    log(`${frm}→${to} REJECTED by ${r.rejected_by||"the system"}: ${r.error}`,"bad");
+    await render(deepestLeaf());
+  } else {
+    log(`${frm}→${to} OK · scope now ${JSON.stringify(r.cap.caveats)}`,"ok");
+    await render(to);   // render the chain down to the agent we just delegated to
+  }
+}
+
+async function checkAction(who,usd,venue){
+  const r = await api("/check_action",{who,max_usd:usd,venue});
+  if(!r.ok){log(r.error,"bad");return;}
+  log(`${who} requests $${usd} on ${venue} → permitted: ${r.permitted}`
+      +(r.permitted?"":`  (within scope: ${r.within_scope}, authority valid: ${r.authority_valid})`),
+      r.permitted?"ok":"bad");
+}
+
+const XRPL_TX_URL = "https://testnet.xrpl.org/transactions/";
+
+function renderXrplStatus(){
+  const el=document.getElementById("xrpl-status"); if(!el) return;
+  const isLive = !!xrplState.createHash;
+  let html = `<span class="xrpl-badge ${isLive?"live":"sim"}">${isLive?"LIVE · XRPL testnet":"simulated"}</span>`;
+  if(xrplState.createHash)
+    html += `<a class="xrpl-tx" href="${XRPL_TX_URL}${xrplState.createHash}" target="_blank" rel="noopener">EscrowCreate → ${xrplState.createHash.slice(0,16)}…</a>`;
+  if(xrplState.finishHash)
+    html += `<a class="xrpl-tx" href="${XRPL_TX_URL}${xrplState.finishHash}" target="_blank" rel="noopener">EscrowFinish → ${xrplState.finishHash.slice(0,16)}…</a>`;
+  el.innerHTML = html;
+}
+
+let xrplState = {createHash:null, finishHash:null};
+
+async function fundEscrow(who,units){
+  xrplState = {createHash:null, finishHash:null};
+  const r=await api("/fund_escrow",{who,units});
+  log(`Escrow funded. Hashlock = expected work-claim address for ${units} units.`,"info");
+  log(`   ${r.hashlock.slice(0,42)}…`,"");
+  if(r.live_xrpl && r.xrpl_tx_hash){
+    xrplState.createHash = r.xrpl_tx_hash;
+    log(`XRPL EscrowCreate → ${r.xrpl_tx_hash.slice(0,24)}…`,"ok");
+  } else if(r.xrpl_fallback){
+    log("XRPL unavailable — using in-process model.","info");
+  }
+  renderXrplStatus();
+}
+async function settle(units){
+  const r=await api("/settle",{units});
+  if(!r.ok){log(r.error,"bad");return;}
+  log(`Submit ${units} units → released: ${r.released} — ${r.reason}`, r.released?"ok":"bad");
+  if(r.live_xrpl && r.xrpl_tx_hash){
+    xrplState.finishHash = r.xrpl_tx_hash;
+    log(`XRPL EscrowFinish → ${r.xrpl_tx_hash.slice(0,24)}…`,"ok");
+  } else if(r.xrpl_fallback){
+    log("XRPL settle unavailable — in-process result shown.","info");
+  }
+  renderXrplStatus();
+}
+
+async function settleClean(){
+  // Demonstrate that settlement works when authority IS live:
+  // reset, re-delegate, fund, and settle — all in one click.
+  await api("/reset",{});
+  await api("/delegate",{frm:"Agent A",to:"Agent B",max_usd:50000,venues:["hill"],ttl_seconds:900});
+  await api("/delegate",{frm:"Agent B",to:"Agent C",max_usd:10000,ttl_seconds:300});
+  await api("/fund_escrow",{who:"Agent C",units:100});
+  const r=await api("/settle",{units:100});
+  log("Reset → delegate → fund → settle with LIVE authority:","info");
+  log(`  released: ${r.released} — ${r.reason}`, r.released?"ok":"bad");
+  if(r.live_xrpl && r.xrpl_tx_hash){
+    xrplState.finishHash = r.xrpl_tx_hash;
+    log(`  XRPL EscrowFinish → ${r.xrpl_tx_hash.slice(0,24)}…`,"ok");
+  }
+  renderXrplStatus();
+  await render("Agent C");
+}
+
+async function revoke(who){
+  const r=await api("/revoke",{who});
+  if(!r.ok){log(r.error,"bad");return;}
+  log(`⚡ SEVERED ${who}. Revocation published against ${r.addr.slice(0,28)}…`,"bad");
+  await render(lastLeaf(), null, who);
+}
+
+async function replay(){
+  const r=await api("/check_action",{who:"Agent C",max_usd:8000,venue:"hill"});
+  if(!r.ok){log(r.error,"bad");return;}
+  log(`C replays its still-signed, unexpired token → authority valid: ${r.authority_valid}`,
+      r.authority_valid?"ok":"bad");
+  if(!r.authority_valid) log(`   ${r.reason}. Killing B killed C.`,"bad");
+}
+
+function deepestLeaf(){
+  for(const n of ["Agent C","Agent B","Agent A"]){
+    if(lastChain.some(x=>x.name===n)) return n;
+  }
+  return "Agent A";
+}
+function lastLeaf(){return deepestLeaf();}
+
+async function render(leaf, _unused, justKilled){
+  const r=await api("/chain?leaf="+encodeURIComponent(leaf));
+  if(!r.ok){return;}
+  lastChain=r.chain;
+  const chainEl=document.getElementById("chain"); chainEl.innerHTML="";
+  let severedSeen=false;
+  const leafValid = r.chain.length && r.chain[r.chain.length-1].valid;
+  r.chain.forEach((node,i)=>{
+    const el=document.createElement("div");
+    let cls="node"; let badge="LIVE";
+    if(node.revoked){cls+=" dead";badge="REVOKED";severedSeen=true;
+      if(node.name===justKilled)cls+=" justkilled";}
+    else if(severedSeen){cls+=" orphan";badge="ORPHANED";}
+    else{cls+=" live";badge="LIVE";}
+    el.className=cls; el.dataset.depth=i;
+    const role=node.parent?"delegation":"root — human grant";
+    const scope=Object.entries(node.caveats).map(([k,v])=>`${k}: ${JSON.stringify(v)}`).join("  ·  ");
+    el.innerHTML=`<span class="badge">${badge}</span>
+      <div class="role">${role}</div>
+      <div class="who">${node.issuer}<span class="arrow">→</span>${node.audience}</div>
+      <div class="scope">${scope}</div>
+      <div class="addr">${node.addr.slice(0,40)}…</div>`;
+    chainEl.appendChild(el);
+  });
+  const vEl=document.getElementById("verdict");
+  if(leafValid){vEl.className="verdict valid";vEl.textContent="✓ VALID — every ancestor present, fresh, unrevoked";}
+  else{const dead=r.chain.find(n=>n.revoked);
+    vEl.className="verdict invalid";
+    vEl.textContent="✗ INVALID — "+(dead?`severed ancestor ${dead.name}`:"chain broken");}
+}
+
+window.startDemo = function(){
+  document.getElementById("home").style.display = "none";
+  document.getElementById("demo").style.display = "block";
+  reset();
+};
+</script>
+</body>
+</html>

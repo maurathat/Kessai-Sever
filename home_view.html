@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sever — home</title>
+<style>
+  /* Same palette as index.html — drop this block's markup into a #home view there. */
+  :root{
+    --bg:#0b0e17; --panel:#121726; --line:#1f2740; --ink:#e8ecf6;
+    --dim:#8893ad; --ruri:#3a59d1; --ruri-bright:#5b7cff;
+    --shu:#e3402c; --shu-glow:#ff5a44; --live:#36c98e; --gold:#d8b24a;
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono',Menlo,monospace;
+    --disp:'SF Pro Display',-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--disp);line-height:1.45;
+    padding:48px 40px 80px;min-height:100vh;
+    background-image:radial-gradient(circle at 25% -10%,rgba(58,89,209,.12),transparent 55%);}
+
+  .home-wrap{max-width:1000px;margin:0 auto}
+
+  /* title block */
+  .title{font-size:72px;font-weight:800;letter-spacing:-.03em;line-height:1}
+  .title .cut{color:var(--shu)}
+  .subtitle{font-family:var(--mono);font-size:18px;color:var(--dim);margin-top:10px}
+  .standards-line{font-family:var(--mono);font-size:13px;color:var(--dim);margin-top:6px}
+  .standards-line b{color:var(--ruri-bright);font-weight:700}
+
+  /* four questions */
+  .questions{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:40px 0 44px}
+  @media(max-width:760px){.questions{grid-template-columns:1fr}}
+  .qcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .qcard .qn{font-family:var(--mono);font-size:12px;color:var(--ruri-bright);font-weight:700}
+  .qcard .qt{font-size:17px;font-weight:600;margin-top:4px}
+  .qcard .qa{font-size:13px;color:var(--dim);margin-top:6px}
+
+  /* diagram */
+  .diagram-title{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);
+    margin-bottom:14px}
+  .arch{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px}
+
+  .cta{margin-top:36px}
+  .cta button{font-family:var(--disp);font-size:16px;font-weight:600;color:#fff;cursor:pointer;
+    background:var(--ruri);border:none;border-radius:10px;padding:13px 26px}
+  .cta button:hover{background:var(--ruri-bright)}
+
+  .lbl{fill:var(--ink);font-family:var(--disp);font-size:14px;font-weight:600}
+  .sub{fill:var(--dim);font-family:var(--mono);font-size:11px}
+  .stage{fill:var(--dim);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em}
+  .note{fill:var(--dim);font-family:var(--mono);font-size:11px}
+</style>
+</head>
+<body>
+<div class="home-wrap">
+
+  <div class="title">Se<span class="cut">ver</span></div>
+  <div class="subtitle">revocation by chain-walk</div>
+  <div class="standards-line">built on <b>UOR-ADDR</b> · <b>VTEAI</b> — two open standards · CC0 · no vendor lock-in</div>
+
+  <div class="questions">
+    <div class="qcard"><div class="qn">Q1</div><div class="qt">Who authorized this agent?</div><div class="qa">A root capability signed by a human key.</div></div>
+    <div class="qcard"><div class="qn">Q2</div><div class="qt">What is it allowed to do?</div><div class="qa">Caveats — spend caps, venue allow-lists, expiry.</div></div>
+    <div class="qcard"><div class="qn">Q3</div><div class="qt">How does trust travel A → B?</div><div class="qa">Hash-linked delegation that only narrows.</div></div>
+    <div class="qcard"><div class="qn">Q4</div><div class="qt">How do you kill it?</div><div class="qa">Publish a revocation; the chain-walk kills the subtree.</div></div>
+  </div>
+
+  <div class="diagram-title">authority → action → settlement</div>
+  <div class="arch">
+    <svg width="100%" viewBox="0 0 900 470" role="img" aria-label="Sever architecture: a content-addressed capability chain governs authority, agents perform work, and an escrow settles only when work is verified and authority is still live; revocation propagates from the chain into settlement.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      </defs>
+
+      <!-- stage 1: authority -->
+      <text class="stage" x="20" y="24">1 · authority</text>
+      <text class="note" x="150" y="24">off-chain · content-addressed</text>
+
+      <g>
+        <rect x="20" y="38" width="150" height="58" rx="9" fill="rgba(58,89,209,.16)" stroke="#3a59d1" stroke-width="1"/>
+        <text class="lbl" x="95" y="62" text-anchor="middle">Human</text>
+        <text class="sub" x="95" y="80" text-anchor="middle">signs root</text>
+      </g>
+      <line x1="170" y1="67" x2="208" y2="67" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+      <g>
+        <rect x="210" y="38" width="150" height="58" rx="9" fill="rgba(58,89,209,.16)" stroke="#3a59d1" stroke-width="1"/>
+        <text class="lbl" x="285" y="62" text-anchor="middle">Agent A</text>
+        <text class="sub" x="285" y="80" text-anchor="middle">$1M · 3 venues</text>
+      </g>
+      <line x1="360" y1="67" x2="398" y2="67" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+      <g>
+        <rect x="400" y="38" width="150" height="58" rx="9" fill="rgba(58,89,209,.16)" stroke="#3a59d1" stroke-width="1"/>
+        <text class="lbl" x="475" y="62" text-anchor="middle">Agent B</text>
+        <text class="sub" x="475" y="80" text-anchor="middle">$50k · 1 venue</text>
+      </g>
+      <line x1="550" y1="67" x2="588" y2="67" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+      <g>
+        <rect x="590" y="38" width="150" height="58" rx="9" fill="rgba(58,89,209,.16)" stroke="#3a59d1" stroke-width="1"/>
+        <text class="lbl" x="665" y="62" text-anchor="middle">Agent C</text>
+        <text class="sub" x="665" y="80" text-anchor="middle">$10k · 1 venue</text>
+      </g>
+      <text class="note" x="20" y="120">each link hash-bound to its parent — authority can only narrow</text>
+
+      <line x1="380" y1="138" x2="380" y2="172" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <!-- stage 2: action -->
+      <text class="stage" x="20" y="196">2 · action</text>
+      <g>
+        <rect x="20" y="208" width="720" height="54" rx="9" fill="rgba(123,119,221,.16)" stroke="#7f77dd" stroke-width="1"/>
+        <text class="lbl" x="380" y="230" text-anchor="middle">Agent C performs the work</text>
+        <text class="sub" x="380" y="248" text-anchor="middle">produces a content-addressed work claim</text>
+      </g>
+
+      <line x1="380" y1="262" x2="380" y2="296" stroke="#5b7cff" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <!-- stage 3: settlement -->
+      <text class="stage" x="20" y="320">3 · settlement</text>
+      <text class="note" x="170" y="320">on-chain · XRPL testnet</text>
+      <g>
+        <rect x="20" y="332" width="720" height="66" rx="9" fill="rgba(54,201,142,.14)" stroke="#36c98e" stroke-width="1"/>
+        <text class="lbl" x="380" y="356" text-anchor="middle">Escrow releases</text>
+        <text class="sub" x="380" y="376" text-anchor="middle">only if work matches the hashlock AND authority is still live</text>
+      </g>
+
+      <!-- revocation propagation -->
+      <line x1="95" y1="96" x2="95" y2="332" stroke="#e3402c" stroke-width="1.5" stroke-dasharray="5 5" marker-end="url(#ar)"/>
+      <text class="note" x="104" y="210" fill="#ff5a44">revoke</text>
+      <text class="note" x="104" y="226" fill="#ff5a44">propagates</text>
+      <text class="note" x="20" y="430">revoking any agent blocks its pending settlement — the kill reaches the money</text>
+    </svg>
+  </div>
+
+  <div class="cta">
+    <button onclick="if(window.startDemo)window.startDemo()">Start the demo →</button>
+  </div>
+
+</div>
+</body>
+</html>
