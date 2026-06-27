@@ -36,6 +36,53 @@ logger = logging.getLogger("sever")
 # On ANY error or timeout, fall back to in-process model — never hang the demo.
 LIVE_XRPL = os.getenv("LIVE_XRPL", "false").lower() in ("true", "1", "yes")
 
+# ── 1Password-backed key source ──────────────────────────────────────────────
+# When OP_ENABLED=true, Agent B and Agent C signing keys are resolved from
+# 1Password via secret references (op://vault/item/field). Falls back to
+# locally generated keys on any error or when disabled. Never writes seeds
+# to disk.
+OP_ENABLED = os.getenv("OP_ENABLED", "false").lower() in ("true", "1", "yes")
+
+# Map agent names to 1Password secret references. Set these in .env.
+# Format: op://vault/item/field
+OP_REFS = {
+    "Agent B": os.getenv("OP_AGENT_B_SEED_REF", ""),
+    "Agent C": os.getenv("OP_AGENT_C_SEED_REF", ""),
+}
+
+
+def load_signing_key(agent_name: str, fallback: Identity) -> Identity:
+    """Resolve an Ed25519 signing key from 1Password when OP_ENABLED=true.
+    The secret reference should point to a 64-char hex string (32-byte seed).
+    Falls back to the locally generated key on any error."""
+    if not OP_ENABLED:
+        return fallback
+    ref = OP_REFS.get(agent_name, "")
+    if not ref:
+        return fallback
+    try:
+        import asyncio
+        from onepassword import Client
+
+        async def _resolve():
+            token = os.environ["OP_SERVICE_ACCOUNT_TOKEN"]
+            client = await Client.authenticate(
+                auth=token,
+                integration_name="Sever",
+                integration_version="0.1.0",
+            )
+            secret = await client.secrets.resolve(ref)
+            return secret
+
+        seed_hex = asyncio.run(_resolve())
+        from nacl.signing import SigningKey
+        sk = SigningKey(bytes.fromhex(seed_hex))
+        logger.info("1Password: loaded key for %s from %s", agent_name, ref.split("/")[2] if "/" in ref else ref)
+        return Identity(name=agent_name, signing_key=sk)
+    except Exception as exc:
+        logger.warning("1Password: failed to load key for %s, using local key: %s", agent_name, exc)
+        return fallback
+
 
 # ── PREIMAGE-SHA-256 crypto-condition helpers ─────────────────────────────────
 # Uses the cryptoconditions library (RFC 8090). The preimage is the canonical
@@ -145,6 +192,9 @@ W: World = None
 def fresh_world() -> World:
     reg = Registry()
     ids = {n: Identity.create(n) for n in ("HUMAN", "Agent A", "Agent B", "Agent C")}
+    # Resolve Agent B and C keys from 1Password when enabled
+    ids["Agent B"] = load_signing_key("Agent B", ids["Agent B"])
+    ids["Agent C"] = load_signing_key("Agent C", ids["Agent C"])
     root = Capability(
         issuer=ids["HUMAN"].did, audience=ids["Agent A"].did,
         resource=address({"asset_class": "equity.private", "issuer": "SpaceX",

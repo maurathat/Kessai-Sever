@@ -4,3 +4,4 @@ uvicorn>=0.27
 xrpl-py>=2.5
 python-dotenv>=1.0
 cryptoconditions>=0.8
+onepassword-sdk>=0.4
